@@ -1,0 +1,15 @@
+1. tree traversal
+2. tree
+3.1.a 
+	
+
+	si la racine == OP PUT 
+		afficher Traverser RHS
+	
+	
+	sinon si racine == OP PLUS
+		retourner traverser LHS + traverser RHS
+	
+	sinon si racine == OP MOINS
+		retourner traverser LHS - traverser RHS 
+
