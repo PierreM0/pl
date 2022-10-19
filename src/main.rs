@@ -130,6 +130,9 @@ struct ScratchRegisterManagement {
 static mut SRM: ScratchRegisterManagement = ScratchRegisterManagement { in_use: [false;7] };
 
 impl ScratchRegisterManagement {
+    /*
+     * search an empty register and return is index
+     */
     fn scratch_alloc(&mut self) -> u8 {
         for i in 0..REG_NAMES.len() {
             if !self.in_use[i] {
@@ -141,10 +144,16 @@ impl ScratchRegisterManagement {
         std::process::exit(1);
     }
 
+    /*
+     * free the state of the register in the bool array
+     */
     fn scratch_free(mut self, r: u8) {
         self.in_use[r as usize] = false;
     }
 
+    /*
+     * return the name of the register via his array
+     */
     fn scratch_name(self, r: u8) -> String {
         REG_NAMES[r as usize].to_string()
     }
@@ -165,6 +174,13 @@ impl LabelGenerator {
     }
 }
 
+/*
+ * UNSAFE: needs the state of the bool array
+ *
+ * Take an AST and return his equivalent in assembly as a String
+ * get u8 to keep track of the registers of the childs nodes
+ *
+ */
 unsafe fn expr_codegen(ast: AST, label_gen: LabelGenerator) -> (u8, String) {
     //println!("{:?}", SRM.in_use); // TODO no more Int after 7 in a row
 
@@ -211,15 +227,13 @@ unsafe fn expr_codegen(ast: AST, label_gen: LabelGenerator) -> (u8, String) {
     }
 
 }
+/*
+ * Take a Vector<AST> (the program) and return a String (all the program as assembly)
+ */
 fn generate_code(program: Vec<AST>) -> String {
-    
-
     let mut label_gen: LabelGenerator = LabelGenerator { counter: 1 };
-
     let mut code = "".to_string();
-
     println!("\n");
-
     let header = "
 BITS 64
 %define SYS_EXIT 60
@@ -293,10 +307,7 @@ _start:
         push    rbp
         mov     rbp, rsp
         sub     rsp, 16
-";
-    
-    
-
+"; // Magic code to put an integer + \n
     code = code.to_owned() + header;
     
     for ast in program {
@@ -310,12 +321,13 @@ _start:
        }
     }
     
-    code +=".LEND:\n        mov     rdi, 0\n        mov    rax, 60\n        syscall";
+    code +=".LEND:\n        mov     rdi, 0\n        mov    rax, 60\n        syscall"; // magic code to
     return code.to_string();
 }
 
 
 /*
+ * Technically run the program (j'ai des remorts à le supprimer)
 fn run(ast: AST) -> u64{
     if !ast.clone().is_empty() {
         match ast.clone().root() {
@@ -399,84 +411,84 @@ impl Token {
     }
 }
 
-
-fn tokenize(program_str: String) -> Vec<Token> {
-    // verry verry TODO  this function skip unknown Token
+/*
+ * Take a program as a string and his path, return a Vector of Tokens
+ * compare char by char
+ */
+fn tokenize(program_str: String , file_path: String) -> Vec<Token> {
     let mut line: u32 = 0;
     let mut col: u32  = 0;
-    let file_path: String = "TODO".to_string(); //TODO
     let mut tokens: Vec<Token> = vec![];
     let mut program_slice = program_str.chars().collect::<Vec<char>>().into_iter(); 
     while !program_str.is_empty() {
-        let mut c = program_slice.next().unwrap_or('\0'); //TODO extract value
-        // TODO use function NEW for Token
-        // TODO rewrite col
+        let mut c = program_slice.next().unwrap_or('\0'); 
         match c { 
             ')' => {
-                let token = Token {
-                    position: Position {line, col, file: file_path.clone() },
-                    lexeme: ")".to_string(),
-                    type_: TokenType::CloseParen,
-                    literal: Literals::EmptyLiterals,
-                };
+                col += 1;
+                let token = Token::new(
+                    Position {line, col, file: file_path.clone() },
+                    ")".to_string(),
+                    TokenType::CloseParen,
+                    Literals::EmptyLiterals,
+                );
                 tokens.push(token)
             }
             '(' => {
-                let token = Token {
-                    position: Position {line, col, file: file_path.clone() },
-                    lexeme: "(".to_string(),
-                    type_: TokenType::OpenParen,
-                    literal: Literals::EmptyLiterals,
-                };
+                col += 1;
+                let token = Token::new(
+                    Position {line, col, file: file_path.clone() },
+                    "(".to_string(),
+                    TokenType::OpenParen,
+                    Literals::EmptyLiterals,
+                );
                 tokens.push(token)
             },
             '\0' => {
-                let token = Token {
-                    position: Position { line, col, file: file_path.clone() }, // TODO
-                    lexeme: "EOF".to_string(),
-                    type_: TokenType::EOF,
-                    literal: Literals::EmptyLiterals,
-                };
+                let token = Token::new(
+                    Position { line, col, file: file_path.clone() },
+                    "EOF".to_string(),
+                    TokenType::EOF,
+                    Literals::EmptyLiterals,
+                );
                 tokens.push(token);
                 break;
             },
             ';' => {
-                let token = Token {
-                    position: Position { line, col, file: file_path.clone() }, // TODO
-                    lexeme: ";".to_string(),
-                    type_: TokenType::Semicolon,
-                    literal: Literals::EmptyLiterals,
-                };
-                tokens.push(token);
                 col += 1;
+                let token = Token::new(
+                    Position { line, col, file: file_path.clone() },
+                    ";".to_string(),
+                    TokenType::Semicolon,
+                    Literals::EmptyLiterals,
+                );
+                tokens.push(token);
             },
             '+' =>  {
-                let token = Token {
-                    position: Position { line, col, file: file_path.clone() }, // TODO
-                    lexeme: "+".to_string(),
-                    type_: TokenType::Plus,
-                    literal: Literals::Operator(Operators::Plus),
-                };
-                tokens.push(token);
                 col += 1;
+                let token = Token::new(
+                    Position { line, col, file: file_path.clone() },
+                    "+".to_string(),
+                    TokenType::Plus,
+                    Literals::Operator(Operators::Plus),
+                );
+                tokens.push(token);
             },
             '-' =>  {
-                let token = Token {
-                    position: Position { line, col, file: file_path.clone() }, // TODO
-                    lexeme: "+".to_string(),
-                    type_: TokenType::Minus,
-                    literal: Literals::Operator(Operators::Minus),
-                };
+                col += 1;
+                let token = Token::new(
+                    Position { line, col, file: file_path.clone() }, 
+                    "-".to_string(),
+                    TokenType::Minus,
+                    Literals::Operator(Operators::Minus),
+                );
                 tokens.push(token);
-                col += 1
             },
             _ => { 
                 if c.is_whitespace() { // TODO Tabs pass 1 cols
                     if c == '\n' {
                         col   = 0;
                         line += 1; 
-                    }
-                    else {
+                    } else {
                         col += 1;
                     }
                 } else if c.is_numeric() {
@@ -485,22 +497,21 @@ fn tokenize(program_str: String) -> Vec<Token> {
                     let mut prg_slice_cln = program_slice.clone();
                     while c.is_numeric() {
                         number_lexeme.push(c);
-                        c = prg_slice_cln.next().unwrap_or('\0'); // TODO unwrap
-                        col += 1;
+                        c = prg_slice_cln.next().unwrap_or('\0');
                         i += 1;
                     }
                     for _ in 0..i-1 {
                         program_slice.next();
                     }
                     let lex = number_lexeme.iter().cloned().collect::<String>();
-                    let token = Token {
-                        position: Position { line, col: col+1, file: file_path.clone() }, // TODO
-                        type_: TokenType::Integer,
-                        lexeme: lex.clone(),
-                        literal: Literals::Integer(lex.clone().parse().unwrap_or(0)),
-                    };
+                    let token = Token::new(
+                        Position { line, col: col+1, file: file_path.clone() }, 
+                        lex.clone(),
+                        TokenType::Integer,
+                        Literals::Integer(lex.clone().parse().unwrap_or(0)),
+                    );
                     tokens.push(token);
-                    col += i-1;
+                    col += lex.len() as u32;
                 } else if c.is_alphabetic() {
                     let mut number_lexeme: Vec<char> = vec![];
                     let mut i = 0;
@@ -508,30 +519,34 @@ fn tokenize(program_str: String) -> Vec<Token> {
 
                     while c.is_alphabetic() {
                         number_lexeme.push(c);
-                        c = prg_slice_cln.next().unwrap_or('\0'); // TODO unwrap
-                        col += 1;
+                        c = prg_slice_cln.next().unwrap_or('\0'); 
                         i += 1;
                     }
+                    let old_col = col;
                     for _ in 0..i-1 {
                         program_slice.next();
                     }
                     let lex = number_lexeme.iter().cloned().collect::<String>();
+                    col += lex.clone().len() as u32;
                     match lex.as_str() {
                     "put" => {
-                            let token = Token {
-                                position: Position { line, col: col+1, file: file_path.clone() }, // TODO
-                                type_: TokenType::Put,
-                                lexeme: lex.clone(),
-                                literal: Literals::Operator(Operators::Put),
-                            };
+                            let token = Token::new(
+                                Position { line, col: old_col+1, file: file_path.clone() }, 
+                                lex.clone(),
+                                TokenType::Put,
+                                Literals::Operator(Operators::Put),
+                            );
                             tokens.push(token);
-                            col += i-1;
                         }
-                    _ => {
-                        eprintln!("ERROR: Unexpected word");
+                    word => {
+                        eprintln!("ERROR:{}:{}:{} Unexpected word `{}`", line, col, file_path.clone(), word);
                         std::process::exit(1)
                         }
                     }
+                }
+                else {
+                    eprintln!("ERROR:{}:{}:{} Unexpected token `{}`", line, col, file_path.clone(), c);
+                    std::process::exit(1)
                 }
             }
         }
@@ -539,6 +554,10 @@ fn tokenize(program_str: String) -> Vec<Token> {
     return tokens;
 }
 
+/*
+ * next_token => the next token
+ * pointer to token, indice to the current token in tokens
+ */
 struct ParsingStruct {
     tokens: Vec<Token>,
     next_token: Token,
@@ -551,29 +570,43 @@ impl ParsingStruct {
         ParsingStruct {
             tokens: tokens.clone(),
             pointer_to_tokens: -1,
-            next_token: tokens.get(0).unwrap().to_owned(),
+            next_token: tokens.get(0).
+                unwrap_or(&Token::new(
+                        Position{line: 0, col: 0, file: "No file path".to_string()},
+                        "".to_string(),
+                        TokenType::EOF,
+                        Literals::EmptyLiterals,
+                        )).to_owned(),
         }
     }
 
+    /*
+     * current token <- next_token
+     * next_token <- next_next_token
+     */
     fn scan_token(&mut self) {
            self.pointer_to_tokens += 1;
            self.next_token = self.tokens
-               .get((self.pointer_to_tokens + 1) as usize).unwrap().to_owned();
+               .get((self.pointer_to_tokens + 1) as usize).unwrap_or(
+                   &Token::new(
+                        Position{line: 0, col: 0, file: "No file path".to_string()},
+                        "".to_string(),
+                        TokenType::EOF,
+                        Literals::EmptyLiterals,
+                        )
+                   ).to_owned();
     }
 }
 
-
-fn parse(tokens: Vec<Token>) -> Vec<AST> {
-    /*
+    /* parse the vec of token in vec of AST
+     *
+     * Scaning scheme
      * E ->  T {+|-} T
      * T -> F {* | /} F 
      * F -> ID | Integer | (E) | -F | put F
      */
-    
-    // ParseE
-    
-
-    let mut expr_list: Vec<Vec<Token>> = vec![];
+fn parse(tokens: Vec<Token>) -> Vec<AST> {
+   let mut expr_list: Vec<Vec<Token>> = vec![];
     let mut i = 0;
     let mut token = &tokens[i];
     let mut expr: Vec<Token> = vec![];
@@ -598,7 +631,9 @@ fn parse(tokens: Vec<Token>) -> Vec<AST> {
     return program;
 }
 
-
+/*
+ * 2nd part of the parsing scheme for operand with priority 2;
+ */
 fn parse_t(token_str: &mut ParsingStruct) -> AST {
     // println!("T: {:?}", token_str.next_token);
     let mut a = parse_f(token_str);
@@ -623,6 +658,9 @@ fn parse_t(token_str: &mut ParsingStruct) -> AST {
     }
 }
 
+/*
+ * 1nd part of the parsing scheme for operand with priority 3;
+ */
 fn parse_e(token_str: &mut ParsingStruct) -> AST {
     // println!("E: {:?}", token_str.next_token);
     let mut a = parse_t(token_str);
@@ -650,6 +688,9 @@ fn parse_e(token_str: &mut ParsingStruct) -> AST {
     } 
 }
 
+/*
+ * third part of the parsing scheme for operand whith priority 1
+ */
 fn parse_f(token_str: &mut ParsingStruct) -> AST {
     // println!("F: {:?}", token_str.next_token);
     if token_str.next_token.type_ == TokenType::Put {
@@ -694,26 +735,18 @@ fn parse_f(token_str: &mut ParsingStruct) -> AST {
 
 
 fn main() {
-    
-    
     let mut args = std::env::args();
-    
     if args.len() < 2 || args.len() > 3{
         eprintln!("ERROR: Usage: ./stem-rs `file`");
     }
-
     args.next(); // consume program name
    
     let file_path: String;
-        file_path = args.next().unwrap(); 
-    
-
-
-    let program_string = fs::read_to_string(file_path).expect("Can't read file");
-    let tokens = tokenize(program_string);
+    file_path = args.next().unwrap_or("".to_string()); 
+    let program_string = fs::read_to_string(file_path.clone()).expect("Can't read file");
+    let tokens = tokenize(program_string, file_path);
     let parsed = parse(tokens);
     
-
     let asm_code = generate_code(parsed.clone());
 
     fs::write("output.asm", asm_code).expect("Can't write the output file");
@@ -722,6 +755,4 @@ fn main() {
   //  for ast in parsed.clone() {
   //    run(ast);
   //  }
-
-   // println!("{}", generate_code(parsed));
 }
