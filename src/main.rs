@@ -7,6 +7,7 @@ enum Operators {
     Mult,
     Div,
     Minus,
+    Assign,
 }
 
 impl core::fmt::Display for Operators {
@@ -17,15 +18,17 @@ impl core::fmt::Display for Operators {
             Self::Minus => write!(f, "-"),
             Self::Div => write!(f, "/"),
             Self::Mult => write!(f, "*"),
+            Self::Assign => write!(f, "="),
         }
     }
 }
 
-#[derive(Copy,PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 enum Literals {
     EmptyLiterals,
     Operator(Operators),
     Integer(u64),
+    Word(String), 
 }
 /*
 impl Literals {
@@ -44,12 +47,14 @@ impl Literals {
 
 }
 */
+
 impl core::fmt::Display for Literals {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
             Self::EmptyLiterals => write!(f, "EMPTYLITERALS (ERROR)"),
             Self::Integer(int) => write!(f, "{}", int),
             Self::Operator(op) => write!(f, "{}", op),
+            Self::Word(w) => write!(f, "{}", w),
         }
     }
 }
@@ -120,14 +125,11 @@ impl AST {
     */
 }
 
-const REG_NAMES: [&str; 7] = ["rbx", "r10", "r11","r12", "r13", "r14", "r15"];
-
 #[derive(Clone, Copy)]
 struct ScratchRegisterManagement {
     in_use: [bool; 7],
 }
 
-static mut SRM: ScratchRegisterManagement = ScratchRegisterManagement { in_use: [false;7] };
 
 impl ScratchRegisterManagement {
     /*
@@ -174,6 +176,9 @@ impl LabelGenerator {
     }
 }
 
+const REG_NAMES: [&str; 7] = ["rbx", "r10", "r11","r12", "r13", "r14", "r15"];
+static mut SRM: ScratchRegisterManagement = ScratchRegisterManagement { in_use: [false;7] };
+
 /*
  * UNSAFE: needs the state of the bool array
  *
@@ -181,7 +186,7 @@ impl LabelGenerator {
  * get u8 to keep track of the registers of the childs nodes
  *
  */
-unsafe fn expr_codegen(ast: AST, label_gen: LabelGenerator) -> (u8, String) {
+unsafe fn expr_codegen(ast: AST, var: &std::collections::HashMap<String, u32>, label_gen: LabelGenerator) -> (u8, String) {
     //println!("{:?}", SRM.in_use); // TODO no more Int after 7 in a row
 
     if ast.clone().is_empty() {
@@ -201,8 +206,8 @@ unsafe fn expr_codegen(ast: AST, label_gen: LabelGenerator) -> (u8, String) {
             Literals::Operator(Operators::Plus) => {
                 let lhs = ast.clone().lhs();
                 let rhs = ast.clone().rhs();
-                let (regle, mut code) = expr_codegen(lhs, label_gen);
-                let (regri, code2)    = expr_codegen(rhs, label_gen);
+                let (regle, mut code) = expr_codegen(lhs, var, label_gen);
+                let (regri, code2)    = expr_codegen(rhs, var, label_gen);
                 
                 code += &code2; 
 
@@ -212,21 +217,76 @@ unsafe fn expr_codegen(ast: AST, label_gen: LabelGenerator) -> (u8, String) {
                 SRM.scratch_free(regle);
                 return (regri, code);
             }
-            Literals::Operator(Operators::Minus) => todo!(),
-            Literals::Operator(Operators::Mult) => todo!(),
-            Literals::Operator(Operators::Div) => todo!(),
-            Literals::Operator(Operators::Put) => {
-                let (regri, mut code) = expr_codegen(ast.clone().rhs(), label_gen);
+            Literals::Operator(Operators::Minus) => {
+                let lhs = ast.clone().lhs();
+                let rhs = ast.clone().rhs();
+                let (regle, mut code) = expr_codegen(lhs, var, label_gen);
+                let (regri, code2)    = expr_codegen(rhs, var, label_gen);
+                
+                code += &code2; 
+
+                let reg_left = SRM.scratch_name(regle);
                 let reg_right = SRM.scratch_name(regri);
-                code += &format!("        mov rdi, {reg_right}\n");
+                code += &format!("        sub    {reg_left}, {reg_right}\n");
+                SRM.scratch_free(regri);
+                return (regle, code);
+
+            },
+            Literals::Operator(Operators::Mult) => {
+                let lhs = ast.clone().lhs();
+                let rhs = ast.clone().rhs();
+                let (regle, mut code) = expr_codegen(lhs, var, label_gen);
+                let (regri, code2)    = expr_codegen(rhs, var, label_gen);
+                
+                code += &code2; 
+
+                let reg_left = SRM.scratch_name(regle);
+                let reg_right = SRM.scratch_name(regri);
+                code += &format!("        mov    rax, {reg_right}\n");
+                code += &format!("        mul    {reg_left}\n");
+                code += &format!("        mov    {reg_right}, rax\n");
+                SRM.scratch_free(regle);
+                return (regri, code);
+            },
+            Literals::Operator(Operators::Div) => {
+                let lhs = ast.clone().lhs();
+                let rhs = ast.clone().rhs();
+                let (regle, mut code) = expr_codegen(lhs, var, label_gen);
+                let (regri, code2)    = expr_codegen(rhs, var, label_gen);
+                
+                code += &code2; 
+
+                let reg_left = SRM.scratch_name(regle);
+                let reg_right = SRM.scratch_name(regri);
+                code += &format!("        mov    rdx, 0\n");
+                code += &format!("        mov    rax, {reg_left}\n");
+                code += &format!("        div    {reg_right}\n");
+                code += &format!("        mov    {reg_left}, rax\n");
+                SRM.scratch_free(regri);
+                return (regle, code);
+            },
+            Literals::Operator(Operators::Put) => {
+                let (regri, mut code) = expr_codegen(ast.clone().rhs(), var, label_gen);
+                let reg_right = SRM.scratch_name(regri);
+                code += &format!("        mov    rdi, {reg_right}\n");
                 code += &format!("        call put\n");
                 SRM.scratch_free(regri);
                 return (0, code);
             }
+            Literals::Word(w) => {
+                let value = var.get_key_value(&w);
+                if value == None { 
+                    var.insert(w, generate_var());
+                }
+                return (0, )  
+            },
+            Literals::Operator(Operators::Assign) => {
+                todo!("Lit::Op(Ops::Assign) in generate_code")
+            },
         }
     }
-
 }
+
 /*
  * Take a Vector<AST> (the program) and return a String (all the program as assembly)
  */
@@ -380,7 +440,9 @@ enum TokenType {
     Put,
     OpenParen,
     CloseParen,
+    Assign,
 
+    Word,
     Integer,
     EOF,
 }
@@ -422,7 +484,18 @@ fn tokenize(program_str: String , file_path: String) -> Vec<Token> {
     let mut program_slice = program_str.chars().collect::<Vec<char>>().into_iter(); 
     while !program_str.is_empty() {
         let mut c = program_slice.next().unwrap_or('\0'); 
-        match c { 
+        match c {
+            '=' => {
+                col += 1;
+                let token = Token::new(
+                    Position {line, col, file: file_path.clone() },
+                    "=".to_string(),
+                    TokenType::Assign,
+                    Literals::Operator(Operators::Assign),
+                );
+                tokens.push(token)
+            }
+
             ')' => {
                 col += 1;
                 let token = Token::new(
@@ -460,6 +533,26 @@ fn tokenize(program_str: String , file_path: String) -> Vec<Token> {
                     ";".to_string(),
                     TokenType::Semicolon,
                     Literals::EmptyLiterals,
+                );
+                tokens.push(token);
+            },
+            '*' =>  {
+                col += 1;
+                let token = Token::new(
+                    Position { line, col, file: file_path.clone() },
+                    "*".to_string(),
+                    TokenType::Mult,
+                    Literals::Operator(Operators::Mult),
+                );
+                tokens.push(token);
+            },
+            '/' =>  {
+                col += 1;
+                let token = Token::new(
+                    Position { line, col, file: file_path.clone() }, 
+                    "/".to_string(),
+                    TokenType::Div,
+                    Literals::Operator(Operators::Div),
                 );
                 tokens.push(token);
             },
@@ -517,7 +610,7 @@ fn tokenize(program_str: String , file_path: String) -> Vec<Token> {
                     let mut i = 0;
                     let mut prg_slice_cln = program_slice.clone();
 
-                    while c.is_alphabetic() {
+                    while c.is_alphabetic() || c.is_numeric() {
                         number_lexeme.push(c);
                         c = prg_slice_cln.next().unwrap_or('\0'); 
                         i += 1;
@@ -538,9 +631,14 @@ fn tokenize(program_str: String , file_path: String) -> Vec<Token> {
                             );
                             tokens.push(token);
                         }
-                    word => {
-                        eprintln!("ERROR:{}:{}:{} Unexpected word `{}`", line, col, file_path.clone(), word);
-                        std::process::exit(1)
+                    _ => {
+                            let token = Token::new(
+                                Position { line, col: old_col+1, file: file_path.clone()},
+                                lex.clone(),
+                                TokenType::Word,
+                                Literals::Word,
+                            );
+                            tokens.push(token);
                         }
                     }
                 }
@@ -565,7 +663,7 @@ struct ParsingStruct {
 }
 
 impl ParsingStruct {
-    
+
     fn new(tokens: Vec<Token>) -> ParsingStruct {
         ParsingStruct {
             tokens: tokens.clone(),
@@ -668,6 +766,13 @@ fn parse_e(token_str: &mut ParsingStruct) -> AST {
         if token_str.tokens.len() <= token_str.pointer_to_tokens as usize {
             break a;
         }
+        if token_str.next_token.type_ == TokenType::Assign {
+            token_str.scan_token();
+            let b = parse_t(token_str);
+            a = AST::new(Literals::Operator(Operators::Assign),
+                a,
+                b)
+        }
         if token_str.next_token.type_ == TokenType::Plus {
             token_str.scan_token();
             let b = parse_t(token_str);
@@ -706,6 +811,12 @@ fn parse_f(token_str: &mut ParsingStruct) -> AST {
             token_str.scan_token();
         }
         return ast;
+    } else if token_str.next_token.type_ == TokenType::Word {
+        let ast = AST::new(token_str.next_token.literal, AST::create_empty(), AST::create_empty());
+        if token_str.tokens.len() > (token_str.pointer_to_tokens -1) as usize {
+            token_str.scan_token();
+        }
+        return ast
     } else if token_str.next_token.type_ == TokenType::Minus {
         token_str.scan_token();
         return AST::new(
@@ -726,7 +837,7 @@ fn parse_f(token_str: &mut ParsingStruct) -> AST {
             std::process::exit(1);
         }
     } else {
-        eprintln!("ERROR: Unknown token type in parse_f");
+        eprintln!("ERROR: Unknown token type `{:?}` in parse_f", token_str.next_token.type_);
         std::process::exit(1);
     }
 
@@ -740,14 +851,17 @@ fn main() {
         eprintln!("ERROR: Usage: ./stem-rs `file`");
     }
     args.next(); // consume program name
-   
+    ) 
     let file_path: String;
     file_path = args.next().unwrap_or("".to_string()); 
     let program_string = fs::read_to_string(file_path.clone()).expect("Can't read file");
+    println!("Program read");
     let tokens = tokenize(program_string, file_path);
+    println!("Program tokenized");
     let parsed = parse(tokens);
-    
+    println!("Program parsed");
     let asm_code = generate_code(parsed.clone());
+    println!("Code generated");
 
     fs::write("output.asm", asm_code).expect("Can't write the output file");
 

@@ -73,32 +73,47 @@ _start:
         sub     rsp, 16
 
 .L2:
-        mov    rbx, 420
-        mov rdi, rbx
+        mov    rbx, 35
+        mov    r10, 34
+        add    r10, rbx
+        mov    rdi, r10
         call put
 
 .L3:
-        mov    rbx, 34
-        mov    r10, 35
-        add    r10, rbx
-        mov rdi, r10
+        mov    rbx, 500
+        mov    r10, 80
+        sub    rbx, r10
+        mov    rdi, rbx
         call put
 
 .L4:
-        mov    rbx, 3
+        mov    rbx, 4
         mov    r10, 3
-        add    r10, rbx
-        mov    r11, 3
+        mov    rax, r10
+        mul    rbx
+        mov    r10, rax
+        mov    rdi, r10
+        call put
+
+.L5:
+        mov    rbx, 32
+        mov    r10, 3
+        mov    rdx, 0
+        mov    rax, rbx
+        div    r10
+        mov    rbx, rax
+        mov    rdi, rbx
+        call put
+
+.L6:
+        mov    rbx, 3
+        mov    r10, 4
+        mov    rax, r10
+        mul    rbx
+        mov    r10, rax
+        mov    r11, 21
         add    r11, r10
-        mov    r12, 3
-        add    r12, r11
-        mov    r13, 3
-        add    r13, r12
-        mov    r14, 3
-        add    r14, r13
-        mov    r15, 3
-        add    r15, r14
-        mov rdi, r15
+        mov    rdi, r11
         call put
 .LEND:
         mov     rdi, 0

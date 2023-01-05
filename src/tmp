@@ -12,4 +12,9 @@
 	
 	sinon si racine == OP MOINS
 		retourner traverser LHS - traverser RHS 
+: 
 
+
+mov reg, 0
+
+xor reg, reg
